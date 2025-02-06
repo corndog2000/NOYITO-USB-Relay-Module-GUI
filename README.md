@@ -6,3 +6,8 @@ Manufacturer documentation for 2-channel module: [NOYITO  5V 2-Channel Micro USB
 **If you are using a 2-channel relay module then you can safely ignore the Relay 3 and Relay 4 buttons.**
 
 ![This image shows a graphical user interface for a "4-Channel USB Relay Control" application. The window contains a serial port selection dropdown showing "COM5 - USB-SERIAL CH340 (COM" selected, a "Refresh Ports" button, and a "Connect" button. Below these is a status indicator showing "Status: Disconnected". The main section labeled "Relay Controls" has four rows of controls, one for each relay (1-4), with "ON" and "OFF" buttons for each. At the bottom is a note about ensuring CH340 drivers are installed. The interface appears to be running on Windows.](https://github.com/corndog2000/NOYITO-USB-Relay-Module-GUI/blob/main/interface.png)
+
+Relay modules this software is for use with:
+- [https://www.amazon.com/NOYITO-2-Channel-Module-Control-Intelligent/dp/B081RM7PMY](https://www.amazon.com/NOYITO-2-Channel-Module-Control-Intelligent/dp/B081RM7PMY)
+- [https://www.amazon.com/NOYITO-4-Channel-Computer-Drive-free-Controller/dp/B08CS9MMD6](https://www.amazon.com/NOYITO-4-Channel-Computer-Drive-free-Controller/dp/B08CS9MMD6)
+- [https://www.amazon.com/NOYITO-4-Channel-Module-Control-Intelligent/dp/B09RGVQXXT](https://www.amazon.com/NOYITO-4-Channel-Module-Control-Intelligent/dp/B09RGVQXXT)
