@@ -1,5 +1,5 @@
 # NOYITO-USB-Relay-Module-GUI
-Windows control software for manual control of the 2-channel and 4-channel NOYITO USB relay modules.
+Windows/Linux control software for manual control of the 2-channel and 4-channel NOYITO USB relay modules.
 
 Manufacturer documentation for 2-channel module: [NOYITO  5V 2-Channel Micro USB Relay Module User Manual.pdf](https://github.com/corndog2000/NOYITO-USB-Relay-Module-GUI/blob/main/NOYITO%20%205V%202-Channel%20Micro%20USB%20Relay%20Module%20User%20Manual.pdf)
 
