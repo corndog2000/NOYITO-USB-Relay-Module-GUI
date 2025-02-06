@@ -42,7 +42,7 @@ class USBRelay:
         if not self.serial or not self.serial.is_open:
             raise ConnectionError("Not connected to relay module")
         self.serial.write(command)
-        time.sleep(0.1)  # Small delay after each command
+        #time.sleep(0.1)  # Small delay after each command
 
     def relay_on(self, relay_num: int) -> None:
         """Turn on a specific relay.
