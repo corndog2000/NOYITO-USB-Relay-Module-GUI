@@ -1,2 +1,5 @@
 .vscode/settings.json
 Examples/basic-control-example.py
+__pycache__
+.venv
+.vscode
