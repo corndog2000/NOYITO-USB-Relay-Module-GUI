@@ -13,4 +13,4 @@ try:
     # Turn off relay 1
     relay.relay_off(1)
 finally:
-    relay.disconnect()s
+    relay.disconnect()
