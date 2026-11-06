@@ -1,7 +1,7 @@
 """
 Serial (CH340) USB Relay Controller
 ====================================
-Driver for CH340-based serial USB relay boards (4-channel).
+Driver for CH340-based serial USB relay boards (1, 2, 4, or 8 channels).
 
 These boards appear as a virtual COM port and use a simple 4-byte
 binary protocol at 9600 baud.
@@ -48,13 +48,19 @@ def enumerate_serial_relays() -> list[dict]:
 
 
 class USBRelay:
-    """Controller for a CH340-based serial relay board (up to 4 channels).
+    """Controller for a CH340-based serial relay board (up to 8 channels).
 
     Protocol (4 bytes per command):
         Byte 0: 0xA0 (header)
-        Byte 1: relay number (0x01–0x04)
+        Byte 1: relay number (0x01–0x08)
         Byte 2: action (0x01 = ON, 0x00 = OFF)
         Byte 3: checksum (sum of bytes 0-2)
+
+    8-channel boards: control uses the same per-channel commands extended
+    to 0x08 (a bulk address 0x0F exists on some "PRO" clones but is not
+    universal, so it is not used). Sending 0xFF alone queries relay state
+    (boards that support it reply one byte per channel: 01 = open/ON,
+    00 = closed/OFF).
 
     Usage::
 
@@ -63,9 +69,12 @@ class USBRelay:
         relay.relay_on(1)
         relay.relay_off(1)
         relay.disconnect()
+
+        relay8 = USBRelay("/dev/ttyUSB0", num_relays=8)
     """
 
-    NUM_RELAYS = 4
+    DEFAULT_NUM_RELAYS = 4
+    MAX_NUM_RELAYS = 8
 
     # Pre-computed command lookup
     COMMANDS = {
@@ -73,17 +82,27 @@ class USBRelay:
             "on": bytes([0xA0, ch, 0x01, (0xA0 + ch + 0x01) & 0xFF]),
             "off": bytes([0xA0, ch, 0x00, (0xA0 + ch + 0x00) & 0xFF]),
         }
-        for ch in range(1, 5)
+        for ch in range(1, MAX_NUM_RELAYS + 1)
     }
 
-    def __init__(self, port: str):
+    def __init__(self, port: str, num_relays: int = DEFAULT_NUM_RELAYS):
         """
         Args:
             port: Serial port path, e.g. 'COM5' or '/dev/ttyUSB0'.
+            num_relays: Number of channels on the board (1–8).
+
+        Raises:
+            ValueError: if num_relays is out of range.
         """
+        if not 1 <= num_relays <= self.MAX_NUM_RELAYS:
+            raise ValueError(
+                f"num_relays must be 1–{self.MAX_NUM_RELAYS}, got {num_relays}"
+            )
         self.port = port
+        self.num_relays = num_relays
         self.serial: Optional[serial.Serial] = None
-        self._state: int = 0  # Software-tracked bitmask (no hw readback)
+        self._state: int = 0  # Software-tracked bitmask
+        self._hw_status_supported: Optional[bool] = None  # None = not probed
 
     # ------------------------------------------------------------------
     # Connection
@@ -130,21 +149,68 @@ class USBRelay:
         self._state &= ~(1 << (relay_num - 1))
 
     def all_on(self) -> None:
-        """Turn on all relays."""
-        for ch in range(1, self.NUM_RELAYS + 1):
+        """Turn on all relays (per-channel loop).
+
+        Note: some 8-channel "PRO" clones accept a bulk command
+        (A0 0F 01 B0), but it is NOT supported universally — the
+        per-channel commands are documented for channels 1-8 on all
+        boards, so always loop.
+        """
+        for ch in range(1, self.num_relays + 1):
             self.relay_on(ch)
 
     def all_off(self) -> None:
-        """Turn off all relays."""
-        for ch in range(1, self.NUM_RELAYS + 1):
+        """Turn off all relays (per-channel loop; see all_on note)."""
+        for ch in range(1, self.num_relays + 1):
             self.relay_off(ch)
 
-    def get_status(self) -> int:
-        """Return software-tracked relay state bitmask.
+    def get_hw_status(self, timeout: float = 0.3) -> Optional[int]:
+        """Query the board for its actual relay states (0xFF query).
 
-        Note: CH340 serial relay boards do not support hardware readback,
-        so this reflects commands sent since connecting.
+        Boards that support querying reply one byte per channel
+        (01 = open/ON, 00 = closed/OFF).
+
+        Returns:
+            Relay state bitmask, or None if the board did not answer.
         """
+        if not self.is_connected:
+            raise ConnectionError("Not connected to relay module")
+        old_timeout = self.serial.timeout
+        try:
+            self.serial.timeout = timeout
+            self.serial.reset_input_buffer()
+            self.serial.write(b"\xFF")
+            time.sleep(0.05)
+            resp = self.serial.read(self.num_relays)
+        except serial.SerialException:
+            return None
+        finally:
+            try:
+                self.serial.timeout = old_timeout
+            except Exception:
+                pass
+        if len(resp) < self.num_relays or any(b not in (0x00, 0x01) for b in resp):
+            return None
+        mask = 0
+        for i, b in enumerate(resp):
+            if b == 0x01:
+                mask |= 1 << i
+        return mask
+
+    def get_status(self) -> int:
+        """Return the relay state bitmask.
+
+        Uses the 0xFF hardware query if the board answers it (probed once);
+        otherwise falls back to software-tracked state reflecting commands
+        sent since connecting.
+        """
+        if self._hw_status_supported is not False:
+            hw = self.get_hw_status()
+            if hw is not None:
+                self._hw_status_supported = True
+                self._state = hw
+            else:
+                self._hw_status_supported = False
         return self._state
 
     def get_relay_state(self, relay_num: int) -> bool:
@@ -157,14 +223,10 @@ class USBRelay:
     # ------------------------------------------------------------------
 
     def _validate_channel(self, relay_num: int) -> None:
-        if relay_num < 1 or relay_num > self.NUM_RELAYS:
+        if relay_num < 1 or relay_num > self.num_relays:
             raise ValueError(
-                f"Relay number must be 1–{self.NUM_RELAYS}, got {relay_num}"
+                f"Relay number must be 1–{self.num_relays}, got {relay_num}"
             )
-
-    @property
-    def num_relays(self) -> int:
-        return self.NUM_RELAYS
 
     # ------------------------------------------------------------------
     # Context manager

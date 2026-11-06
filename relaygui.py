@@ -3,7 +3,8 @@ Unified USB Relay Control GUI
 ==============================
 Supports two types of relay boards:
 
-  1. **Serial (CH340)** — appears as a virtual COM port, 4 channels.
+  1. **Serial (CH340)** — appears as a virtual COM port, 1/2/4/8 channels
+     (channel count selected manually; the board cannot self-report it).
   2. **HID** — appears as a USB HID device (VID 16C0 : PID 05DF), 1–8 channels.
 
 Dependencies:
@@ -91,19 +92,29 @@ class RelayControlGUI:
         ttk.Button(self.main, text="Refresh", command=self.refresh_devices).grid(
             row=2, column=2, **pad)
 
-        # ---- Row 3: connect button ----
+        # ---- Row 2b: serial channel count (serial boards can't self-report) ----
+        ttk.Label(self.main, text="Channels:").grid(row=3, column=0, **pad, sticky="e")
+        self.serial_ch_var = tk.StringVar(value="4")
+        self.serial_ch_combo = ttk.Combobox(
+            self.main, textvariable=self.serial_ch_var, width=6,
+            values=["1", "2", "4", "8"], state="readonly")
+        self.serial_ch_combo.grid(row=3, column=1, **pad, sticky="w")
+        ttk.Label(self.main, text="(serial only)", foreground="gray").grid(
+            row=3, column=2, **pad, sticky="w")
+
+        # ---- Row 4: connect button ----
         self.connect_btn = ttk.Button(self.main, text="Connect",
                                       command=self._toggle_connection)
-        self.connect_btn.grid(row=3, column=0, columnspan=3, pady=12)
+        self.connect_btn.grid(row=4, column=0, columnspan=3, pady=12)
 
-        # ---- Row 4: status ----
+        # ---- Row 5: status ----
         self.status_var = tk.StringVar(value="Disconnected")
         ttk.Label(self.main, textvariable=self.status_var, foreground="gray").grid(
-            row=4, column=0, columnspan=3, **pad)
+            row=5, column=0, columnspan=3, **pad)
 
-        # ---- Row 5: relay channel controls (built dynamically) ----
+        # ---- Row 6: relay channel controls (built dynamically) ----
         self.relay_frame = ttk.LabelFrame(self.main, text="Relay Channels", padding=8)
-        self.relay_frame.grid(row=5, column=0, columnspan=3, pady=8, sticky="ew")
+        self.relay_frame.grid(row=6, column=0, columnspan=3, pady=8, sticky="ew")
         self._channel_widgets: list[dict] = []  # list of {label, on_btn, off_btn, indicator}
 
         # Build placeholder (max 8 rows); visibility toggled on connect
@@ -112,9 +123,9 @@ class RelayControlGUI:
             self._channel_widgets.append(row_widgets)
         self._set_channels_visible(0)
 
-        # ---- Row 6: all-on / all-off ----
+        # ---- Row 7: all-on / all-off ----
         bulk_frame = ttk.Frame(self.main)
-        bulk_frame.grid(row=6, column=0, columnspan=3, pady=4)
+        bulk_frame.grid(row=7, column=0, columnspan=3, pady=4)
         self.all_on_btn = ttk.Button(bulk_frame, text="All ON",
                                      command=self._all_on, state="disabled")
         self.all_on_btn.pack(side="left", padx=6)
@@ -126,11 +137,11 @@ class RelayControlGUI:
             command=self._poll_status, state="disabled")
         self.refresh_status_btn.pack(side="left", padx=6)
 
-        # ---- Row 7: help text ----
+        # ---- Row 8: help text ----
         self.help_var = tk.StringVar()
         ttk.Label(self.main, textvariable=self.help_var,
                   wraplength=580, justify="left", foreground="gray").grid(
-            row=7, column=0, columnspan=3, pady=(10, 0))
+            row=8, column=0, columnspan=3, pady=(10, 0))
         self._update_help_text()
 
     def _make_channel_row(self, parent, index: int) -> dict:
@@ -211,6 +222,9 @@ class RelayControlGUI:
             self._disconnect()
         self.refresh_devices()
         self._update_help_text()
+        # Channel-count selector is only meaningful for serial boards
+        self.serial_ch_combo.configure(
+            state="readonly" if self.type_var.get() == "serial" else "disabled")
 
     def _update_help_text(self):
         dev_type = self.type_var.get()
@@ -265,7 +279,8 @@ class RelayControlGUI:
         try:
             if dev_type == "serial":
                 port_info = self._serial_ports[idx]
-                relay = USBRelay(port_info["device"])
+                num_relays = int(self.serial_ch_var.get())
+                relay = USBRelay(port_info["device"], num_relays=num_relays)
                 relay.connect()
                 self.relay = relay
                 self.num_channels = relay.num_relays
@@ -287,6 +302,7 @@ class RelayControlGUI:
         self.connected = True
         self.connect_btn.configure(text="Disconnect")
         self.device_combo.configure(state="disabled")
+        self.serial_ch_combo.configure(state="disabled")
         self.status_var.set(f"Connected: {label}  ({self.num_channels} channels)")
         self.all_on_btn.configure(state="normal")
         self.all_off_btn.configure(state="normal")
@@ -308,6 +324,8 @@ class RelayControlGUI:
         self.num_channels = 0
         self.connect_btn.configure(text="Connect")
         self.device_combo.configure(state="readonly")
+        self.serial_ch_combo.configure(
+            state="readonly" if self.type_var.get() == "serial" else "disabled")
         self.status_var.set("Disconnected")
         self.all_on_btn.configure(state="disabled")
         self.all_off_btn.configure(state="disabled")
@@ -373,7 +391,11 @@ class RelayControlGUI:
             w["canvas"].itemconfig(w["dot"], fill="gray", outline="darkgray")
 
     def _poll_status(self):
-        """Periodically read relay status and update indicators."""
+        """Periodically read relay status and update indicators.
+
+        Uses hardware readback where supported (HID feature report;
+        serial 0xFF query), otherwise software-tracked state.
+        """
         if not self.connected or self.relay is None:
             return
         try:

@@ -5,15 +5,16 @@ Cross-platform GUI and Python library for controlling USB relay modules — both
 ## Supported Hardware
 
 ### Serial (CH340) Relay Modules
-These appear as a virtual COM port and use a 4-byte binary protocol at 9600 baud.
+These appear as a virtual COM port and use a 4-byte binary protocol at 9600 baud. Supported in 1, 2, 4, and 8-channel variants (select the channel count in the GUI — serial boards cannot self-report it).
 
 - [NOYITO 2-Channel USB Relay Module](https://www.amazon.com/NOYITO-2-Channel-Module-Control-Intelligent/dp/B081RM7PMY)
 - [NOYITO 4-Channel USB Relay Module](https://www.amazon.com/NOYITO-4-Channel-Computer-Drive-free-Controller/dp/B08CS9MMD6)
 - [NOYITO 4-Channel USB Relay Module (alt)](https://www.amazon.com/NOYITO-4-Channel-Module-Control-Intelligent/dp/B09RGVQXXT)
+- [NOYITO 8-Channel Micro USB Relay Module](https://www.amazon.com/NOYITO-8-Channel-Module-Control-Intelligent/dp/B09RGTSHHW)
 
 Manufacturer documentation: [NOYITO 5V 2-Channel Micro USB Relay Module User Manual.pdf](https://github.com/corndog2000/NOYITO-USB-Relay-Module-GUI/blob/main/NOYITO%20%205V%202-Channel%20Micro%20USB%20Relay%20Module%20User%20Manual.pdf)
 
-**If you are using a 2-channel relay module, you can safely ignore the Relay 3 and Relay 4 buttons.**
+**If you select more channels than the board has, the extra buttons are simply ignored by the board. 8-channel boards also support a `FF` status query, which the GUI uses automatically for real readback when the board answers.**
 
 ### HID Relay Modules
 These appear as USB HID devices (no COM port) and are controlled via HID feature reports. Supports 1, 2, 4, and 8 channel boards.
@@ -67,10 +68,10 @@ A tkinter GUI that supports both Serial (CH340) and HID relay modules with a rad
 
 Features:
 - Auto-detection of CH340 serial ports and HID relay devices
-- Dynamic channel count (1–8 channels for HID, 4 for serial)
+- Dynamic channel count (1–8 channels for HID; 1/2/4/8 selectable for serial)
 - Per-channel ON/OFF buttons with green/gray status indicators
 - All ON / All OFF bulk controls
-- Refresh Status button for manual state readback
+- Refresh Status button for manual state readback (8-channel serial boards respond to the `FF` query; HID boards read back via feature report)
 
 ```bash
 python relaygui.py
